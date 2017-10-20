@@ -5,7 +5,7 @@ class ModuleDemo extends Component {
   render(){
 	  
     return (
-      <div>
+      <div className='demo_title'>
 	<h2>{this.props.text}</h2>
       </div>
     );
