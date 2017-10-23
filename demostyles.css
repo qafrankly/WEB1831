@@ -3,7 +3,8 @@
 }
 
 .FranklyModulesDemo {
-  border: 1px solid black;
+  border: 1px solid #666666;
   padding: 20px;
   margin-top: 20px;
+  width: 100%
 }
