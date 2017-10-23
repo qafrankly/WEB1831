@@ -7,7 +7,6 @@ class ModuleDemo extends Component {
     return (
       <div className='FranklyModulesDemo'>
 	<h2 className='demo_text'>{this.props.text}</h2>
-	<br/>
 	<p>This text is not editable!</p>
       </div>
     );
