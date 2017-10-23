@@ -6,7 +6,7 @@ class ModuleDemo extends Component {
 	  
     return (
       <div className='demo_text'>
-	<h2>{this.props.text}</h2>
+	<h2>{this.props.text} </h2>
       </div>
     );
 	  
