@@ -6,6 +6,7 @@ class ModuleDemo extends Component {
 	  
     return (
       <div className='PageTitle-text demo_text'>
+	<br/>
 	<h2>{this.props.text}</h2>
       </div>
     );
