@@ -5,7 +5,7 @@ class ModuleDemo extends Component {
   render(){
 	  
     return (
-      <div className='PageTitle-text FranklyModulesDemo'>
+      <div className='FranklyModulesDemo'>
 	<h2 className='demo_text'>{this.props.text}</h2>
 	<br/>
 	This text is not editable!
