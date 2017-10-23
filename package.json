@@ -6,7 +6,7 @@
     "text": "PropTypes.string"
   },
   "defaultProps": {
-    "text": "Welcome to the demo of Frankly Modules!!!"
+    "text": "Welcome to the demo of Frankly Modules!!"
   },
   "FRN_resourceEndpoints": [
     {
