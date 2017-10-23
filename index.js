@@ -8,6 +8,8 @@ class ModuleDemo extends Component {
       <div className='PageTitle-text demo_text'>
 	<br/>
 	<h2>{this.props.text}</h2>
+	<br/>
+	This text is not editable!
       </div>
     );
 	  
