@@ -9,10 +9,9 @@
 
 
 .FranklyModulesDemo {
-  border: 1px solid #999999;
   padding: 20px;
   margin: 20px 0;
-  width: 100%;
+  xwidth: 100%;
   background-color: #eeeeee;
 }
 
