@@ -6,23 +6,7 @@ class HomePageTakeover extends Component {
     super(props) //assigns props to this.props
     this.state = {} /* great place to assign default state */
   }
-  // ajax = (url,callback) => {
-  //   let req = new XMLHttpRequest();
-  //   req.open("GET", url);
-  //   req.onload = function() {
-  //       if (req.status === 200) {
-  //           callback(req.response);
-  //       } else {
-  //           new Error(req.statusText);
-  //       }
-  //   };
-  //
-  //   req.onerror = function() {
-  //       new Error("Network error");
-  //   };
-  //
-  //   req.send();
-  // }
+
 
   componentWillMount() { /* OPTIONAL, fires before initial mount into DOM. Setting state here or editing props here will not cause a re-render*/ }
   componentDidMount() {/* OPTIONAL, fires after initial rendering ( based on initial default state ), DOM can be accessed here if needed. */ }
