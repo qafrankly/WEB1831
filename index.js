@@ -38,7 +38,7 @@ class HomePageTakeover extends Component {
 
 
   render(){ //REQUIRED
-    return (<div></div>);
+    return (<div>test</div>);
   }
 }
 
