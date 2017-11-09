@@ -6,7 +6,7 @@ class HomePageTakeover extends Component {
  
 
   render(){ //REQUIRED
-    return ()
+    return ('hello');
   }
   
 }
