@@ -1,799 +1,489 @@
-import React, { Component } from 'react';
-const hasLocalStorage =(function hasLocalStorage(){
-  let uid = new Date();
-    try {
-        localStorage.setItem(uid, uid);
-        localStorage.removeItem(uid);
-        return true;
-    } catch (e) {
-      return false;
-    }
-})()
+import React, {Component, PropTypes} from 'react';
 
 
-class Banner extends Component{
+class BannerController {
 
-  constructor(props){
-    super(props)
-    this.state = {
-      active: false,
-      alerts: [],
-      collapsed: true,
-      debug: true
-
-    }
-
-    this.affiliate = props.affiliate;
-    this.cacheDuration = 60 * 1000;
-    this.slideDelay = 10 * 1000;
-    this.transitionSpeed = 600;
-    this.bannerChecker = null;
-    this.bannerSlider = null;
-
-
+  constructor(stationID){
+    this.stationID = stationID;
+    this.station = stationID === 1 ? 'kotv' : 'kwtv';
+    this.bannerFeed = `http://kotv.com/api/getBanners.aspx?station=${this.station}&IsWeb=true`;
+    this.cacheDuration = (60 * 1000);
   }
 
-  componentWillMount(){
-		if(typeof window != 'object'){
-      if(process.env.HOME == '/Users/don'){
-  		//	var BannerCache = require('../ServerCache/BannerCache.js')
-  			this.updateAlerts(BannerCache.get()); //sorry
+  static hasLocalStorage(){
+    let uid = new Date();
+      try {
+          localStorage.setItem(uid, uid);
+          localStorage.removeItem(uid);
+          return true;
+      } catch (e) {
+        return false;
       }
-		}
-	}
-
-  componentDidMount(){
-
-
-    if(this.state.debug)
-        this.updateAlerts(banners_fake);
-    else{
-      this.getDataIfNeeded();
-      this.bannerChecker = setInterval(()=>{this.getDataIfNeeded()},this.cacheDuration);
-    }
-    this.bannerSlider = setInterval(()=>{this.slideBanner()},this.slideDelay);
-
-
   }
 
-
-  getDataIfNeeded(){
-    if(hasLocalStorage){
+  getCache(callback){
+    if(BannerController.hasLocalStorage()){
       let now = (new Date()).getTime();
       let currentdata = localStorage.getItem('banners');
       let current_expire = localStorage.getItem('banners_expire');
       if (!currentdata || current_expire < now){
-        this.getData();
+        this.getData(callback);
       } else {
-        this.updateAlerts( JSON.parse(currentdata) );
-
+        return callback(JSON.parse(currentdata));
       }
     } else {
-      this.getData();
+      this.getData(callback);
     }
-
+    return false;
   }
 
-  ajax = (url,callback) => {
-    let req = new XMLHttpRequest();
-    req.open('GET', url);
-    req.onload = function() {
-        if (req.status === 200) {
-            callback(req.response);
+  getData(callback) {
+    fetch(this.bannerFeed)
+      .then((response) => response.json())
+      .then((json) => {
+        if(json.length){
+          if(BannerController.hasLocalStorage()){
+            let cachetime = (new Date()).getTime() + this.cacheDuration;
+            localStorage.setItem('banners', JSON.stringify(json));
+            localStorage.setItem('banners_expire', cachetime);
+          }
+          callback(json);
         } else {
-            new Error(req.statusText);
-        }
-    };
-
-    req.onerror = function() {
-        new Error('Network error');
-    };
-
-    req.send();
-  }
-
-  getData(){
-
-      this.ajax(`http://kotv.com/api/getBanners.aspx?station=${this.affiliate}&IsWeb=true`, (res) => {
-        res = JSON.parse(res);
-        if(!res.length){
-          this.updateAlerts([]);
           return false;
         }
-         if(hasLocalStorage){
-           let cachetime = (new Date()).getTime() + this.cacheDuration;
-           localStorage.setItem('banners', JSON.stringify(res));
-           localStorage.setItem('banners_expire', cachetime);
-         }
-
-          this.updateAlerts(res);
-
-        })
-
-
-
-  }
-
-  updateAlerts(alerts){
-
-    alerts.map((a,i) =>{
-      switch(a.BannerTypeId){
-        case 0: a.class = 'alert-breaking' ; break; //Breaking News
-        case 1: a.class = 'alert-closing' ; break; //School Closings
-        case 3: a.class= 'alert-announcement' ; break; //General Announcement
-        case 5: a.class= 'alert-streaming' ;break; //Livestream
-        case 15: a.class= 'alert-earthquake' ;break; //Earthquake
-        default: a.class='' ;
-
-      }
-
-      a.activeOrder = i;
-
-      return null;
-    })
-
-    this.setState({
-                    alerts: alerts,
-                    active: alerts.length > 0 ? true : false
-                  })
-    if(typeof window == 'object')
-      window.onresize = this.makeSpaceForHeader;
-
-
-  }
-
-  slideBanner(){
-    if(!this.state.collapsed)
-      return null
-    this.setState(function(prevState){
-      if (prevState.alerts.length == 0)
-        return
-      let newalerts = prevState.alerts.map((el,i,array)=>{
-        el.activeOrder = el.activeOrder != 0 ? el.activeOrder - 1 : array.length - 1 ;
-        return el
       })
-
-
-      return{
-        alerts: newalerts,
-        animating: true
-      }
-    })
+      .catch((error) => {
+        console.log(`Error retrieving Banners: ${error}`);
+      });
   }
-
-  componentDidUpdate(prevProps, prevState){
-    console.log('this.state.active', this.state.active);
-    console.log('prevState.active',prevState.active)
-    if(this.state.active != prevState.active || this.state.collapsed != prevState.collapsed)
-      this.makeSpaceForHeader();
-  }
-
-  componentWillUnmount(){
-    clearInterval(this.bannerChecker);
-    clearInterval(this.bannerSlider);
-    this.makeSpaceForHeader();
-
-  }
-
-  makeSpaceForHeader = () =>{
-    /* css transition for this effect can be found both in Banner.css and global.css */
-    console.log('made space for header')
-    var banner_height = this.state.active ? (this.state.collapsed?  40 :  this.state.alerts.length*40 ) : 0;
-
-    var header_height = 101;
-    if(typeof document.getElementById('gnm-header-without-banner') == 'object'){
-      var header_height = document.getElementById('gnm-header-without-banner').offsetHeight;
-
-    }
-
-
-
-    let new_padding = (header_height + banner_height + 8) + 'px';
-
-    console.log('new padding '+ new_padding )
-    /* really hate touching the DOM, but I don't see any way out of this */
-    if(document.getElementById('gnm-main-body'))
-		  document.getElementById('gnm-main-body').style.paddingTop = new_padding;
-      /* for frankly layout only */
-    if(document.querySelector('.PageGrid.PageBody.container'))
-      document.querySelector('.PageGrid.PageBody.container').style.paddingTop = new_padding;
-	}
-
-
-
-
-  toggleCollapsed(){
-    this.setState((prevState)=>{
-      return { collapsed: !prevState.collapsed }
-    })
-
-  }
-
-  animatedStyle = (a,i) => {
-    if(this.state.collapsed){
-      let transformPercent = 0;
-      let zIndex = '-1'
-      if(a.activeOrder == this.state.alerts.length - 1){
-        transformPercent = 100;
-        zIndex = '1';
-      }
-      if(a.activeOrder == 0){
-          zIndex = '1';
-      }
-
-      return{
-                zIndex: (this.state.alerts.length - a.activeOrder).toString(),
-
-                transition :'z-index '+6*this.transitionSpeed+'ms linear,  transform ' + this.transitionSpeed + 'ms ease-in-out',
-                transform: 'translate3d(0,'+ transformPercent+ '%,0)'
-              }
-    }
-    else{
-
-
-      return {  opacity: '1',
-                zIndex: (this.state.alerts.length - a.activeOrder).toString(),
-                transition :'z-index 0ms, transform ' + this.transitionSpeed + 'ms ease-in-out',
-                transform: 'translate3d(0,'+100*a.activeOrder+'%,0)'
-              }
-    }
-
-  }
-
-  animatedClass = (a,i) => {
-    if(this.state.collapsed == true)
-      return 'alert-red';
-
-    if(a.activeOrder%2 == 1)
-      return 'alert-light-red';
-    return 'alert-red';
-  }
-
-
-
- render(){
-   return(
-     <div className=' gnm-banner'>
-
-
-         <div id='gnm-banner-wrapper'
-              className={'  gnm-banner-main gnm-banner ' + (this.state.active ? 'active' : 'inactive')}
-              style={this.state.collapsed? {}: {height: this.state.alerts.length*40 + 'px'}} >
-           <div className='container ' >
-
-            <button className='show-all' onClick={this.toggleCollapsed.bind(this)}>
-                <span className={'glyphicon glyphicon-chevron-up ' +(this.state.collapsed? 'collapsed':'')}></span>
-            </button>
-
-            <div className='alert-container'>
-               {
-                 this.state.alerts.map((a,i) => {
-                   return(
-                     <div key={i}
-                          className={'item '  }
-                          style={this.animatedStyle(a,i)}
-                         role='option'>
-
-                         <a className={'alert text-capitalize ' + this.animatedClass(a,i) + (a.activeOrder == 0 ? ' active' : '')} role='alert' href={a.Link}>
-
-                             <div className='line-clamp '>
-                                 <span className='alert-name'>
-                                   <span className='text-uppercase'>{a.Title}:</span>
-                                   <span>{a.BannerTypeId != 1 ? a.Description:
-
-                                       (<span className='sponsor'>
-                                         <span className='hidden-xs'>Sponsored </span>By Osage RiverSpirit Casino & Resort
-                                       </span>)
-                                   }</span>
-                                </span>
-                             </div>
-
-
-                         </a>
-                     </div>
-                   )
-                 })
-               }
-
-              </div>
-
-            </div>
-         </div>
-     </div>
-
-
-   )
- }
-
 
 }
 
 
-class MobileMegaNav extends Component {
+/* weather takeover does not need server-side rendering */
 
+const testBannerData=[{Title:"Watch Live Now",Type:"ls",Link:"javascript:GNM.liveStream('http://www.newson6.com/Global/category.asp?C=202152&amp;BannerId=1343');",Description:"Severe Weather Coverage",Target:"_self",BannerTypeId:5,BannerInfoTypeMask:247,EncoderTypeId:7,EncoderUrls:[{EncoderUrlTypeId:2,EncoderUrlTypeTitle:"Mobile",Url:"http://kotv-lh.akamaihd.net/i/KOTV_1180@97915/master.m3u8"},{EncoderUrlTypeId:1,EncoderUrlTypeTitle:"Website",Url:"http://kotv-lh.akamaihd.net/z/KOTV_1180@97915/manifest.f4m"}],Audio:!0,Theme:"",Content:"Weather"},{Title:"Watch Live Now",Type:"ls",Link:"javascript:GNM.liveStream('http://www.newson6.com/Global/category.asp?C=202152&amp;BannerId=1343');",Description:"Skycam View of Tornado",Target:"_self",BannerTypeId:5,BannerInfoTypeMask:247,EncoderTypeId:7,EncoderUrls:[{EncoderUrlTypeId:2,EncoderUrlTypeTitle:"Mobile",Url:"http://kotv-lh.akamaihd.net/i/KOTV_1180@97915/master.m3u8"},{EncoderUrlTypeId:1,EncoderUrlTypeTitle:"Website",Url:"http://kotv-lh.akamaihd.net/z/KOTV_1180@97915/manifest.f4m"}],Audio:!0,Theme:"",Content:"Weather"},{Title:"Watch Live Now",Type:"ls",Link:"javascript:GNM.liveStream('http://www.newson6.com/Global/category.asp?C=202152&amp;BannerId=1343');",Description:"Von Castor Drives Through Tornado",Target:"_self",BannerTypeId:5,BannerInfoTypeMask:247,EncoderTypeId:7,EncoderUrls:[{EncoderUrlTypeId:2,EncoderUrlTypeTitle:"Mobile",Url:"http://kotv-lh.akamaihd.net/i/KOTV_1180@97915/master.m3u8"},{EncoderUrlTypeId:1,EncoderUrlTypeTitle:"Website",Url:"http://kotv-lh.akamaihd.net/z/KOTV_1180@97915/manifest.f4m"}],Audio:!0,Theme:"",Content:"Weather"},{Title:"Special Coverage",Type:"link",Link:"http://www.newson6.com/category/310877/terence-crutcher-police-shooting",Description:"Betty Shelby Manslaughter Trial ",Target:"_self",BannerTypeId:3,BannerInfoTypeMask:83,EncoderTypeId:0,Audio:!0,Theme:"",Content:"Livestreaming"},{Title:"Need To Know",Type:"link",Link:"http://www.newson6.com/story/7724324/oklahoma-lake-levels",Description:"Oklahoma Lake Levels",Target:"_self",BannerTypeId:3,BannerInfoTypeMask:7,EncoderTypeId:0,Audio:!1,Theme:"",Content:"Livestreaming"}];
+
+//temp for testing
+const testData = true;
+const testDataObj = {"date":"2016-03-28T09:44:41.7797644-05:00","Alert":[{"type":"Tornado Watch","IssueAt":"2016-03-28T04:29:00","ExpiresAt":"2016-03-29T19:00:00","AffectedAreas":{"Area":[{"id":"Okmulgee, OK"},{"id":"Pawhuska, OK"},{"id":"Tulsa, OK"},{"id":"Owasso, OK"},{"id":"Atoka, OK"},{"id":"Broken Arrow, OK"},{"id":"Bixby, OK"},{"id":"Prue, OK"}]},"AlertTextShort":{"section":"Tornado Watch in effect until March 29 at 7:00PM CDT by NWS."},"AlertTextLong":{"section":"...FIRE WEATHER WATCH REMAINS IN EFFECT FROM TUESDAY AFTERNOON THROUGH TUESDAY EVENING FOR STRONG WINDS AND LOW RELATIVE HUMIDITY FOR WESTERN OKLAHOMA PANAHANDLE AND WESTERN AND SOUTH-CENTRAL TEXAS PANHANDLE... * AFFECTED AREA...IN OKLAHOMA...CIMARRON AND TEXAS. IN TEXAS... DALLAM...SHERMAN...HANSFORD...HARTLEY...MOORE...HUTCHINSON..."}},{"type":"Flood Warning","IssueAt":"2016-03-28T04:29:00","ExpiresAt":"2016-03-29T19:00:00","AffectedAreas":{"Area":[{"id":"Okmulgee, OK"},{"id":"Pawhuska, OK"},{"id":"Tulsa, OK"},{"id":"Owasso, OK"}]},"AlertTextShort":{"section":"Tornado Watch in effect until March 29 at 7:00PM CDT by NWS."},"AlertTextLong":{"section":"...FIRE WEATHER WATCH REMAINS IN EFFECT FROM TUESDAY AFTERNOON THROUGH TUESDAY EVENING FOR STRONG WINDS AND LOW RELATIVE HUMIDITY FOR WESTERN OKLAHOMA PANAHANDLE AND WESTERN AND SOUTH-CENTRAL TEXAS PANHANDLE... * AFFECTED AREA...IN OKLAHOMA...CIMARRON AND TEXAS. IN TEXAS... DALLAM...SHERMAN...HANSFORD...HARTLEY...MOORE...HUTCHINSON..."}},{"type":"Severe Thunderstorm Warning","IssueAt":"2016-03-28T04:29:00","ExpiresAt":"2016-03-29T19:00:00","AffectedAreas":{"Area":[{"id":"Okmulgee, OK"},{"id":"Pawhuska, OK"},{"id":"Tulsa, OK"},{"id":"Owasso, OK"},{"id":"Atoka, OK"},{"id":"Broken Arrow, OK"},{"id":"Bixby, OK"},{"id":"Prue, OK"}]},"AlertTextShort":{"section":"Tornado Watch in effect until March 29 at 7:00PM CDT by NWS."},"AlertTextLong":{"section":"...FIRE WEATHER WATCH REMAINS IN EFFECT FROM TUESDAY AFTERNOON THROUGH TUESDAY EVENING FOR STRONG WINDS AND LOW RELATIVE HUMIDITY FOR WESTERN OKLAHOMA PANAHANDLE AND WESTERN AND SOUTH-CENTRAL TEXAS PANHANDLE... * AFFECTED AREA...IN OKLAHOMA...CIMARRON AND TEXAS. IN TEXAS... DALLAM...SHERMAN...HANSFORD...HARTLEY...MOORE...HUTCHINSON..."}},{"type":"Tornado Warning","IssueAt":"2016-03-28T04:29:00","ExpiresAt":"2016-03-29T19:00:00","AffectedAreas":{"Area":[{"id":"Cimarron, OK"},{"id":"Texas, OK"}]},"AlertTextShort":{"section":"Tornado Warning in effect until March 29 at 7:00PM CDT by NWS."},"AlertTextLong":{"section":"...FIRE WEATHER WATCH REMAINS IN EFFECT FROM TUESDAY AFTERNOON THROUGH TUESDAY EVENING FOR STRONG WINDS AND LOW RELATIVE HUMIDITY FOR WESTERN OKLAHOMA PANAHANDLE AND WESTERN AND SOUTH-CENTRAL TEXAS PANHANDLE... * AFFECTED AREA...IN OKLAHOMA...CIMARRON AND TEXAS. IN TEXAS... DALLAM...SHERMAN...HANSFORD...HARTLEY...MOORE...HUTCHINSON..."}}]};
+//temp for testing
+
+const isEmptyObject = function(obj){
+  let name;
+  for(name in obj){ return false; }
+  return true;
+};
+
+const isArray = function(obj){
+  return Object.prototype.toString.call(obj) === '[object Array]';
+};
+
+class WeatherTakeover extends Component {
   constructor(props){
-    super(props)
-    this.state ={
-      open: props.open ? true : false,
-      items: []
+    super(props);
+    this.affiliate = this.props.affiliate;
+    this.stationCall = this.affiliate == "kotv" ? 'newson6' : 'news9';
+    this.stationTitle = this.affiliate == "kotv" ? 'News On 6' : 'News 9';
+    this.assetUrl = 'http://ftpcontent.worldnow.com/kotv/custom/wxtakeover/';
+    this.social = {
+      fb: `https://www.facebook.com/sharer/sharer.php?u=http%3A//www.${this.stationCall}.com/`,
+      twitter: `https://twitter.com/home?status=Watch%20Live%20-%20Severe%20Weather%20Coverage%20on%20http%3A//www.${this.stationCall}.com%20%23okwx`,
+      mail: `mailto:?&subject=Watch Live - Severe Weather Coverage&body=Watch%20Live%20-%20Severe%20Weather%20Coverage%20on%20http%3A//www.${this.stationCall}.com`
     }
 
-    this.toggleParent = props.toggle;
-    this.subNavOpenInhibitor = false;
-    this.subNavOpenTimer = null;
-  }
+    if(typeof window == "object"){
+      if(window.WNVideoWidget)
+        var WNVideoWidget = window.WNVideoWidget;
+      else
+        console.error('WNVideoWidget couldnt be found!');
+    }
 
-  componentWillReceiveProps(nextProps){
-    /* it will not likely mount with the menu already */
-    nextProps.items.forEach(i=>{
-      i.active = false;
-    })
-    this.setState({
-      items: nextProps.items,
-      open: nextProps.open
-    })
-
-  }
-
-
-  toggleSubMenu( i){
-
-    /* don't forget to close the others */
-    this.setState( (prevState) => {
-      if(prevState.items[i].active){
-
-         prevState.items.map(item=>{item.active = false})
+    this.state = {
+      banners: [],
+      warnings: [],
+      ads: [],
+      hasInjected: false,
+      watchExpanded: false,
+      feedUrl: `http://kotv.com/api/GetWxEvents.ashx?type=json&cmd=AppEvents&id=4&station=${this.affiliate}`,
+      settings: {
+        hostDomain: this.affiliate == "kotv" ? 'newson6' : 'news9',
+        stationName: this.affiliate == "kotv" ? 'News On 6' : 'News 9',
+        weatherIcon: this.affiliate == "kotv" ? `${this.assetUrl}6weathericon.png` : `${this.assetUrl}9weathericon.png`,
+        weatherIconLarge: this.affiliate == "kotv" ? `${this.assetUrl}6weathericon_lg.png` : `${this.assetUrl}9weathericon_lg.png`,
+        textMsg: this.affiliate == "kotv" ? 'Travis' : 'David',
+        videoImg: this.affiliate == "kotv" ? `${this.assetUrl}wx-takeover-tmeyer.jpg` : `${this.assetUrl}wx-takeover-dpayne.jpg`,
+        warnName: this.affiliate == "kotv" ? 'WARN Radar' : 'ESP Radar',
+        warningPage: this.affiliate == "kotv" ? 'http://www.newson6.com/weatheralerts' : 'http://www.news9.com/weatheralerts',
+        warnLink: this.affiliate == "kotv" ? 'http://www.newson6.com/category/158741/warn-interactive-live-radar' : 'http://www.news9.com/category/158742/interactive-esp-radar',
+        streetLink: this.affiliate == "kotv" ? 'http://www.newson6.com/category/121189/weather-radar' : 'http://www.news9.com/category/118562/weather-radar-page'
       }
-      else{
-        prevState.items.map(item=>{item.active = false});
-        prevState.items[i].active = true;
-      }
-      return {
-        items: prevState.items
-      }
-    })
-
+    }
   }
 
-  toggleMenu = () => {
-    this.toggleParent();
-    this.setState( function(prevState){
-      return {
-        open : !prevState.open
+  componentDidMount() {
+    //ajax call for wx data
+    if(!testData){
+      let bannerController = new BannerController(this.affiliate == "kotv"? 1 : 2);
+      bannerController.getCache(this.addBanners);
+      fetch(this.state.feedUrl)
+        .then((response) => response.json())
+        .then((json) => { this.addWarnings(json); })
+        .catch((error) => {
+          console.log(`Error while retrieving warning data: ${error}`);
+        });
+    } else {
+      this.addBanners(testBannerData);
+      this.addWarnings(testDataObj);
+    }
+
+
+
+    let hoverZone = document.querySelector('#hoverZone');
+    let watchesAndWarnings = document.querySelector('#watchesAndWarnings');
+    let closeWW = document.querySelector('#closeWW');
+
+    hoverZone.addEventListener('click', (e) => {
+      if(!this.state.watchExpanded){
+        this.setState({
+          watchExpanded: true
+        });
+        watchesAndWarnings.classList.add('expanded');
       }
-    })
+    });
 
-
+    closeWW.addEventListener('click', (e) => {
+      this.setState({
+        watchExpanded: false
+      });
+      watchesAndWarnings.classList.remove('expanded');
+    });
   }
 
-  toggleMouseOver(i,e) {
-
-
-      this.toggleSubMenu(i);
-      // this.subNavOpenInhibitor = true;
-      // this.subNavOpenTimer = setTimeout( ()=>{this.subNavOpenInhibitor = })
+  addBanners = (data) => {
+    if(!isEmptyObject(data)){
+      let tmpArr = [];
+      data.forEach((banner, i) => {
+        if(banner['EncoderUrls'] && banner['Content'].toLowerCase().indexOf('weather') > -1){
+          banner['EncoderUrls'].forEach((encoder) => {
+            if(encoder['EncoderUrlTypeId'] === 1){ banner['DesktopUrl'] = encoder['Url']; }
+            else if(encoder['EncoderUrlTypeId'] === 2){ banner['MobileUrl'] = encoder['Url']; }
+          });
+          tmpArr.push(banner);
+        }
+      });
+      this.setState({
+        banners: tmpArr
+      });
+    }
   }
 
+  addWarnings = (data) => {
+    if(!isEmptyObject(data)){
+      let warnings = data['Alert'];
+      let tmpArr = [];
+      let tornadoArr = [];
+      let otherArr = [];
+
+      let tornadoWarnings = warnings.filter(warning => warning.type === 'Tornado Warning');
+      let otherWarnings = warnings.filter(warning => warning.type !== 'Tornado Warning');
+      tornadoWarnings.forEach((tornadoWarning) => {
+        let countylist = tornadoWarning['AffectedAreas']['Area'];
+        if(isArray(countylist)){
+          countylist.forEach((warning) => {
+            tornadoArr.push({county: warning.id, type: 'Tornado Warning'});
+          });
+        } else {
+          tornadoArr.push({county: countylist.id, type: 'Tornado Warning'});
+        }
+      });
+      otherWarnings.forEach((otherWarning) => {
+        let warningType = otherWarning['type'];
+        let countylist = otherWarning['AffectedAreas']['Area'];
+        if(isArray(countylist)){
+          countylist.forEach((warning) => {
+            otherArr.push({county: warning.id, type: warningType});
+          });
+        } else {
+          otherArr.push({county: countylist.id, type: warningType});
+        }
+      });
+      tornadoArr.sort(function(a,b){ return a.county.localeCompare(b.county); });
+      otherArr.sort(function(a,b){ return a.county.localeCompare(b.county); });
+      tmpArr = tornadoArr.concat(otherArr);
+      this.setState({
+        warnings: tmpArr
+      });
+    }
+  }
+
+  changeTabs = (event, type) => {
+    event.preventDefault();
+    let wxtakeover = document.getElementById('wxTakeover');
+    if(!wxtakeover.className === type){
+      wxtakeover.className = type;
+    }
+  }
+
+  playStream = (event, liveStreamURL, mobileURL, liveStreamTitle, mask, autoPlay = true) => {
+    /* only onclick event so we can use the window object */
+    event.preventDefault();
+    window.teststreamarr = [event, liveStreamURL, mobileURL, liveStreamTitle, mask, autoPlay];
+    let startGraphic = document.getElementById('startGraphic');
+    if(!startGraphic.classList.contains('off')){ startGraphic.classList.add('off'); }
+    let targ = liveStreamURL === 'first' ? document.querySelector('.ls_option[data-ind="0"]').children[0] : event.target;
+    window.testtarg = targ;
+    /* check to make sure its not already the selected stream */
+    if(!targ.parentElement.classList.contains('selected')){
+      console.log('not selected');
+      let selects = document.querySelectorAll('.ls_option.selected');
+      if(selects.length){ selects[0].classList.remove('selected'); }
+      targ.parentElement.classList.add('selected');
+      let preroll;
+      if(liveStreamURL === 'first'){
+        let firstBanner = this.state.banners[0];
+        liveStreamURL = firstBanner['DesktopUrl'];
+        mobileURL = firstBanner['MobileUrl'];
+        liveStreamTitle = firstBanner['Description'];
+        mask = firstBanner['BannerInfoTypeMask'];
+      }
+      preroll = (mask & 0x40) > 0;
+
+      let domCanvasId = 'divWNVideoCanvas23987';
+      if(WNVideoWidget){
+        let wNVideoCanvas = new WNVideoWidget('WNVideoCanvas', domCanvasId);
+        wNVideoCanvas.SetStylePackage('dark');
+        wNVideoCanvas.SetVariable('widgetId', 'widget_id_placeholder');
+        wNVideoCanvas.SetVariable('addThisDivId', `${domCanvasId}_addThis`);
+        wNVideoCanvas.SetVariable('incanvasAdDivId', `${domCanvasId}_adDiv`);
+        wNVideoCanvas.SetSkin(window.CANVAS_SKINS.flat.ebony);
+        wNVideoCanvas.SetVariable('toolsShareButtons', 'link,share');
+        wNVideoCanvas.SetVariable('overlayShareButtons', 'link,share');
+        wNVideoCanvas.SetVariable('transportShareButtons', 'cc');
+        wNVideoCanvas.SetWidth('auto');
+        wNVideoCanvas.SetHeight('auto');
+        wNVideoCanvas.SetVariable('isAutoStart', autoPlay);
+        wNVideoCanvas.SetFlashLiveStream({
+          strUrl: liveStreamURL,
+          strHeadline: `${liveStreamTitle} - ${this.stationTitle}`,
+          strSummaryImageUrl: '',
+          strAdTag: 'weather',
+          hasPreroll: preroll,
+          mobileStreams: [{ url: mobileURL, type: 'video/mp4' }]
+        });
+        wNVideoCanvas.RenderWidget();
+      }
+
+    }
+  }
 
 
   render(){
-    return(
-      <div className={" gnm-mobile-mega-nav " + (this.state.open ? "active" : "" ) }>
-        <div className="container">
+    //temp
+    let bannerAmt = 2;
+    //temp
+    let extraClass = this.state.warnings.length < 4 ? 'disable' : '';
+    let lsOptionClass = `amt${this.state.banners.length}`;
+    let rightClass = `right_section ${extraClass}`;
+    return (
+      <div  className="row live gnm-weather-takeover">
+        <div className="col-xl-9 col-xs-12">
           <div className="row">
-            <div className="col-lg-3 col-md-4 col-sm-3 col-xs-6 dark-background first-column">
-                <div className="row lift">
-                  <div className="col-xs-12 search-container">
-                    <div className="input-group">
-                      <input type="text" className="form-control" placeholder="Search"/>
-                      <span className="input-group-btn">
-                        <button className="btn btn-default" type="button">
-                          <span className="glyphicon glyphicon-search"></span>
-                        </button>
-                      </span>
-                    </div>
-                  </div>
+            <div className="col-xl-8 col-lg-8 col-md-8 col-sm-7 col-xs-12">
+              <h2 className="white text-center overflow-hidden">Severe Weather Coverage</h2>
+              <div className="wxLivestream">
+                <div id="wxLSPlayer">
+                  <a id="startGraphic" href="#" onClick={(e) => { this.playStream(e, 'first'); }}><div className="blackhover"></div><i className="fa fa-play-circle-o"></i><img src={this.state.settings.videoImg} /></a>
+                  <div id="divWNWidgetsContainer23987"><div id="divWNVideoCanvas23987"></div></div>
                 </div>
-
-
-                {this.state.items.map((navitem, i) => {
-                  return (
-                    <div key={i}    onClick={this.toggleSubMenu.bind(this,i)}
-                      >
-                      <div className=" row lift">
-                        <div className={" exclusive-hover category col-xs-12 hover-color " + (navitem.active? "active":"")}  >
-                            <div className="row">
-                              <div className="col-xs-9 pointer" >
-                                <span  >{navitem.title}</span>
-                              </div>
-                              <div className="col-xs-3 pointer"  >
-                                  <span className={" glyphicon glyphicon-chevron-right " + (navitem.active? "spun": "")} ></span>
-                              </div>
-                            </div>
+                <div id="wxLSoptions" className={lsOptionClass}>
+                  <h3>View Live Feeds</h3>
+                  {this.state.banners.map((banner, i) => {
+                    return (
+                      <div className="ls_option" key={i} data-ind={i}>
+                        <a href="#" onClick={(e) => { this.playStream(e, banner['DesktopUrl'], banner['MobileUrl'], banner['Description'], banner['BannerInfoTypeMask']); }} className="ls_picker" data-encoder-url={banner['DesktopUrl']} data-encoder-mobile={banner['MobileUrl']} data-mask={banner['BannerInfoTypeMask']}>{banner['Description']}</a>
+                        <span className="streaming">Streaming</span>
+                      </div>
+                    );
+                  })}
+                  <div className="clearfix"></div>
+                </div>
+              </div>
+              <div className="row hidden-xl">
+                <div className="upload col-xs-6">
+                  <div className="row">
+                    <div className="col-xs-12">
+                      <div className="inner_border">
+                        <div className="row">
+                          <div className="col-xs-3">
+                            <img className="img-responsive" src={this.state.settings.weatherIconLarge} />
+                          </div>
+                          <div className="col-xs-9">
+                            <h3>Download the {this.stationTitle} Weather App. </h3>
+                            <p>Text <b>{this.state.settings.textMsg}</b> to <b>79640</b>.</p>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  );
-                })}
-                {this.state.items.map((navitem, i) => {
-                  return(
-                    <div key={i} className={" dark-background subcategory-page " + (navitem.active? "active " : "inactive") }>
-
-                        <div className={"col-xs-12 inner-border" }>
-                          <div className="row hover-color  category subcategory top-level-route">
-                            <a href="#">
-                              <div className="col-xs-12 tiny-padding-top ">
-                                <span>{navitem.title + " Home"}</span>
-                              </div>
-                            </a>
+                  </div>
+                </div>
+                <div className="safety col-xs-6">
+                  <div className="row">
+                    <div className="col-xs-12">
+                      <div className="inner_border">
+                        <div className="row">
+                          <div className="col-xs-12">
+                            <h3>Help Others Stay Safe</h3>
+                            <p>Alert others about severe weather as it approaches.</p>
                           </div>
-
-                          {navitem.subItems.map((subitem, j)=>{
-                            return (
-                              <div key={j} className="row hover-color  category subcategory">
-                                <a href="#" onClick={this.toggleMenu} >
-                                  <div className="col-xs-12 tiny-padding-top">
-                                    <span href="#" >{subitem.title}</span>
-                                  </div>
-                                </a>
-                              </div>
-                            );
-                          })}
-
                         </div>
-
-                    </div>
-                  )
-                })}
-                <div className="subcategory-page dark-background "></div>
-
-
-
-            </div>
-
-          </div>
-
-        </div>
-      </div>
-    )
-  }
-
-}
-
-/* escape frankly deploy script with this text */import XML2JS from 'xml2js';
-
-
-
-class CurrentConditions extends Component {
-
-  constructor(props){ //gives us acces to props, fires long before page load
-    super(props) //assigns props to this.props
-    this.affiliate = props.affiliate;
-    this.lastChecked = Date.now();
-    this.state = {
-			radarImg: `http://aws.kotv.com/MorHtml5/kotv/ssite/110x62_new/main_anim.gif?${(new Date()).getTime()}`,
-      city: '',
-      state: '',
-      conditionIcon: '',
-      temp: '',
-      feelsLike: '',
-			high: '',
-      low: '',
-			currentConditions: [],
-		}
-  }
-
-  ajax = (url,callback) => {
-    let req = new XMLHttpRequest();
-    req.open('GET', url);
-    req.onload = function() {
-        if (req.status === 200) {
-            callback(req.response);
-        } else {
-            new Error(req.statusText);
-        }
-    };
-    req.onerror = function() {new Error('Network error')};
-    req.send();
-  }
-
-  buildWeather = (data) =>{
-    if(!data)
-      return
-		let parseString = XML2JS.parseString,
-			forecasts = [], jsondata,
-			parsefunc = parseString(data, {attrNameProcessors: [(name => '@' + name)], explicitArray: false, charkey: '#text', mergeAttrs: true}, function(err, result){ jsondata = result; }),
-			maindata = jsondata['WxSources'],
-			forecastdata = maindata['forecast']['WxForecasts'],
-			todaysforecast = forecastdata['WxForecast'][0],
-			currentdata = maindata['conditions']['sfc_ob'];
-
-		this.setState({
-			city: currentdata['location']['#text'],
-			state: currentdata['location']['@region'],
-			conditionIcon: 'http://ftpcontent.worldnow.com/griffin/gnm/testing/svg/day/' + currentdata['WxIconType']['#text'] + '.svg',
-			temp: currentdata['temp']['#text'],
-			feelsLike: currentdata['apparent_temp']['#text'],
-			high: todaysforecast['High'],
-			low: todaysforecast['Low']
-		});
-	}
-
-  componentDidMount(){
-    var stationID = this.affiliate == 'kotv'? 1 : 2 ;
-    this.getCurrentConditions();
-  }
-
-  componentWillMount(){
-		if(typeof window != 'object'){
-      if(process.env.HOME == '/Users/don'){
-  		//	var CurrentConditionsCache = require('../ServerCache/CurrentConditionsCache.js')
-  			this.buildWeather(CurrentConditionsCache.get())
-      }
-
-		}
-	}
-
-  getCurrentConditions(){
-		var zip = this.affiliate == 'kotv'? 74120 : 73179;
-		var stationID = this.affiliate == 'kotv'? 1 : 2 ;
-		var url = `http://kotv.com/api/GetForecast.ashx?target=data&action=WxForecast2012&site=` + stationID + `&zip=` + zip;
-
-    this.ajax(url, (res)=>{
-      this.buildWeather(res);
-      this.lastChecked = Date.now();
-    })
-	}
-
-
-  render(){ //REQUIRED
-    return (<div className='gnm-current-conditions '>
-              <div className='row '>
-
-                <div className='col-xs-12 temperature-sm '>
-                  <img className='weather-icon-sm' src={this.state.conditionIcon} />
-                  <div className='current-temp'>{this.state.temp}&deg;</div>
-
-                  <div className='radar-container visible-lg-block'>
-                    <a href='#'>
-                      <img className='radar-img' src={this.state.radarImg} alt='radar image'/>
-                    </a>
-                    <div>
-                      <a href='#' className='map-link'>Tulsa, OK <span className='glyphicon glyphicon-map-marker'></span></a>
+                        <div className="social row">
+                          <div className="col-xs-4 fb">
+                            <a id="fbbtn" href={this.social.fb} target="_blank"><button id="shareFacebook" type="button"><i className="fa fa-facebook"></i></button></a>
+                          </div>
+                          <div className="col-xs-4 twit">
+                            <a href={this.social.twitter} target="_blank"><button id="shareTwitter" type="button"><i className="fa fa-twitter"></i></button></a>
+                          </div>
+                          <div className="col-xs-4 email">
+                            <a href={this.social.mail}><button id="shareEmail" type="button"><i className="fa fa-envelope"></i></button></a>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
-
                 </div>
-
               </div>
-            </div>)
-  }
-}
-
-
-
-var TempNav = [
-		{"title": "Home", "url":"/"},
-		{"title": "News", "url": "/category/112042/news", "subItems":[
-			{"title": "6 Investigates", "url":"/category/175087/6-investigates"},
-			{"title": "Crime", "url":"/category/161867/crime"},
-			{"title": "Strange News", "url":"/category/13544/strange-news"},
-			{"title": "Health", "url":"/category/38921/health"},
-			{"title": "Politics", "url":"/category/312367/politics"},
-			{"title": "Special Coverage", "url":"/category/120892/special-coverage"},
-			{"title": "Oklahoma Earthquakes", "url":"/category/225338/oklahoma-earthquakes"},
-			{"title": "Links Mentioned", "url":"/category/120897/the-news-on-6-featured-links"},
-			{"title": "Send Us News Tips", "url":"/category/121090/the-news-on-6-news-tips"}
-		]},
-		{"title": "Weather", "url": "/weather", "subItems":[
-			{"title": "WARN Interactive Radar", "url":"/category/158741/warn-interactive-live-radar"},
-			{"title": "U Control: Street Level", "url":"/category/121189/weather-radar"},
-			{"title": "Watches & Warnings", "url":"/category/198135/u-control-weather-center"},
-			{"title": "Osage SKYCAMS", "url":"/category/197844/skycam-network"},
-			{"title": "Weather Safety", "url":"/category/120962/weather-safety"},
-			{"title": "Alan's Bus Stop Forecast", "url":"/category/167399/alans-bus-stop-forecast"},
-			{"title": "Fishing with Lacey", "url":"/category/320811/fishing-with-lacey"},
-			{"title": "Lake Levels", "url":"/story/7724324/oklahoma-lake-levels"},
-			{"title": "Traffic", "url":"/category/296298/news-on-6-traffic-map"}
-		]},
-		{"title": "Sports", "url": "/sports", "subItems":[
-			{"title": "OU", "url":"/category/210006/oklahoma-sooners"},
-			{"title": "OSU", "url":"/category/210005/oklahoma-state-cowboys"},
-			{"title": "TU", "url":"/category/210002/tulsa-golden-hurricane"},
-			{"title": "ORU", "url":"/category/210003/oral-roberts-golden-eagles"},
-			{"title": "Thunder", "url":"/category/210007/oklahoma-city-thunder"},
-			{"title": "Ford Sports Blitz", "url":"/category/219810/oklahoma-ford-sports-blitz"},
-			{"title": "High School Football", "url":"/category/211942/high-school-football"},
-			{"title": "Scores & Schedules", "url":"/category/216373/high-school-football-schedule-scoreboard"}
-		]},
-		{"title": "Video", "url": "/category/121535/video-page", "subItems":[
-			{"title": "Watch CBS Shows", "url":"/link/554772/cbs-programming-catch-your-favorite-cbs-shows-old-favorites"},
-			{"title": "Video Requests", "url":"/category/121092/the-news-on-6-video-requests"}
-		]},
-		{"title": "Recipes", "url": "/category/116530/recipes"},
-		{"title": "Lifestyle", "url": "/category/68446/lifestyle", "subItems":[
-			{"title": "Entertainment", "url":"/category/73801/entertainment"},
-			{"title": "Money", "url":"/category/120652/money"},
-			{"title": "Home & Family", "url":"/category/120651/home-family"},
-			{"title": "Health", "url":"/category/38921/health"},
-			{"title": "Food", "url":"/category/39546/food"},
-			{"title": "Pets", "url":"/category/29878/pets"},
-			{"title": "Technology", "url":"/category/58532/technology"},
-			{"title": "Travel", "url":"/category/23748/travel"},
-			{"title": "Beauty & Style", "url":"/category/76708/beauty-style"},
-			{"title": "Auto", "url":"/category/41934/auto"},
-			{"title": "VideoBytes", "url":"/category/120657/videobytes"},
-			{"title": "Press Releases", "url":"/category/230909/press-releases"}
-		]},
-		{"title": "Community", "url": "/category/197945/community", "subItems":[
-			{"title": "Weather Teller", "url":"/story/35036323/news-on-6-goes-old-school-with-nostalgic-weather-teller"},
-			{"title": "Food For Kids", "url":"/category/208729/food-for-kids"},
-			{"title": "TV Schedule", "url":"/story/11777977/tv-programming-schedule"},
-			{"title": "AARP Caregivers", "url":"/category/300552/aarp-care-act"},
-			{"title": "NOW Cable Listings", "url":"/category/277097/kotv-channels"}
-		]},
-		{"title": "Contests", "url": "/category/122577/contests", "subItems":[
-			{"title": "Text & Win", "url":"/link/462221/text-win"},
-			{"title": "Winners' Circle", "url":"/story/18813691/winners-circle"}
-		]},
-		{"title": "About Us", "url": "/category/156589/about-us", "subItems":[
-			{"title": "Contact Us", "url":"/category/156589/about-us"},
-			{"title": "Products", "url":"/category/191276/tools-and-features"},
-			{"title": "Careers", "url":"/category/120924/employment-opportunities"}
-		]}
-	]
-
-
-class Header extends Component{
-	constructor(props){
-		super(props);
-    this.stationID = props.affiliate === 'kwtv' ? 2 : 1; //Dont beleive this has been set yet
-    this.affiliate = props.affiliate;
-		this.navigation_data = props.cache;
-		this.state = {
-      largeLogoUrl: 'http://ftpcontent.worldnow.com/kotv/test/don/build/img/bug.svg',
-      smallLogoUrl: 'http://ftpcontent.worldnow.com/kotv/test/don/build/img/n6logo.svg',
-			radarImg: `http://aws.kotv.com/MorHtml5/kotv/ssite/110x62_new/main_anim.gif?${(new Date()).getTime()}`,
-			navItems: [],
-      megaNavItems: [],
-      mobileMegaNavItems : [],
-      mobileMegaNavOpen: false,
-      city: '',
-      state: '',
-      conditionIcon: '',
-      temp: '',
-      feelsLike: '',
-			high: '',
-      low: '',
-			currentConditions: [],
-			currentsConditionsTime: Date.now()
-		}
-
-
-	}
-
-	ajax = (url,callback) => {
-    let req = new XMLHttpRequest();
-    req.open('GET', url);
-    req.onload = function() {
-        if (req.status === 200) {
-            callback(req.response);
-        } else {
-            new Error(req.statusText);
-        }
-    };
-
-    req.onerror = function() {
-        new Error('Network error');
-    };
-
-    req.send();
-  }
-
-
-  componentDidMount(){
-		if(typeof window == 'object'){
-			//this is only a test (but we are assuming it will be async)
-			//window.jQuery.ajax({ url:'tempnav.json', dataType:'jsonp', jsonpCallback:'Nav'}).then((data) => { this.buildState(data.items); });
-			// this.ajax('tempnav.json',(res) =>{
-			// 	res = JSON.parse(res)
-			// 	this.buildState(res)
-			// })
-			this.buildState(TempNav)
-		}
-
-  }
-
-	componentWillMount(){
-		if(typeof window != 'object')
-		 	if(process.env.HOME == '/Users/don'){
-				/* problem here we can't run this on Frankly servers */
-			//	var NavigationCache = require('../ServerCache/NavigationCache.js')
-				this.buildState(NavigationCache.get()); //sorry
-			}
-	}
-
-
-
-
-	buildState(navs){
-		// let navs = data.items;
-
-		let navItems = [];
-		let megaNavItems = [];
-    let mobileMegaNavItems = [];
-		navs.map(function(item, i){
-			if(typeof item.subItems !== 'undefined' && item.title !== 'About Us' && item.title !== 'Video' && item.title != 'Contests'&& item.title !== 'Home'){
-        megaNavItems.push(item);
-      }
-      if(typeof item.subItems !== 'undefined' && item.title !== 'Home')
-        mobileMegaNavItems.push(item);
-
-			if(item.title !== 'About Us' && item.title !== 'Home'){
-        navItems.push(item);
-     }
-		});
-
-		this.setState({
-			navItems: navItems,
-			megaNavItems: megaNavItems,
-      mobileMegaNavItems: mobileMegaNavItems
-		});
-	}
-
-
-
-  toggleMobileMegaNav = () => {
-    this.setState({
-      mobileMegaNavOpen: !this.state.mobileMegaNavOpen
-    })
-  }
-
-
-
-	render(){
-		return(
-      <div className='gnm-header '>
-					  <Banner affiliate={this.affiliate} ></Banner>
-					<div id='gnm-header-without-banner'>
-						<div className='container'>
-		          <div className='header-top row '>
-								<div className='col-xs-3 col-sm-2 col-md-1 col-lg-1 button-container'>
-									<button className='show-live '>
-										<div className=''>Live</div>
-										<span className='middot'></span>
-									</button>
-									<button  onClick={ this.toggleMobileMegaNav} className={'dark-icon-bar-container ' + (this.state.mobileMegaNavOpen? 'active' : '')}>
-										<div className='dark-icon-bar'></div>
-										<div className='dark-icon-bar'></div>
-										<div className='dark-icon-bar'></div>
-									</button>
-								</div>
-								<div className='col-xs-6 col-sm-8  col-md-9 col-lg-9'>
-									<img src='img/n6logo.svg' className='logo-sm'></img>
-
-								</div>
-
-
-
-
-
-		            <div className='col-xs-3 col-sm-2 col-md-2 col-lg-2' >
-									<CurrentConditions affiliate={this.affiliate}></CurrentConditions>
-		            </div>
-		          </div>
-						</div>
-
-					</div>
-					<MobileMegaNav items={this.state.mobileMegaNavItems} open={this.state.mobileMegaNavOpen} toggle={this.toggleMobileMegaNav}/>
-
-
+            </div>
+            <div className="col-xl-4 col-lg-4 col-md-4 col-sm-5 hidden-xs">
+              <div className="watcheswarnings">
+                <div className="watchheader">
+                  <h3>Watches and Warnings</h3>
+                  <p>Get The Latest Info For Your County</p>
+                </div>
+                <div className="warninglist">
+                  <ul>
+                    {this.state.warnings.slice(0, 3).map((warning, i) => {
+                      return (
+                        <li className={warning.type.toLowerCase()} key={i}>
+                          <a href={this.state.settings.warningPage} target="_blank">
+                            <i className="fa fa-circle"></i>
+                            <span className="county">{warning.county}</span>
+                            <span className="warning">{warning.type}</span>
+                          </a>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+                <div className="radars">
+                  <h3>Radars</h3>
+                  <div className="radar_inner">
+                    <img src="http://aws.kotv.com/kotv/comp/600x330/statewide_anim.gif" />
+                    <div className="row">
+                      <div className="col-xs-6">
+                        <a href={this.state.settings.warnLink} target="_blank"><button id="warnRadar" type="button">{this.state.settings.warnName}</button></a>
+                      </div>
+                      <div className="col-xs-6">
+                        <a href={this.state.settings.streetLink} target="_blank"><button id="streetRadar" type="button">Street Level Radar</button></a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div id="div-gpt-ad-614486550423061904-1" className="ad"></div>
+                <div className="downloadapp row">
+                  <div className="col-xs-3">
+                    <img className="img-responsive" src={this.state.settings.weatherIconLarge} />
+                  </div>
+                  <div className="col-xs-9">
+                    <h3>Download The Weather App. </h3>
+                    <p>Text <b>{this.state.settings.textMsg}</b> to <b>79640</b>.</p>
+                  </div>
+                </div>
+                <div className="safety row">
+                  <div className="col-xs-12">
+                    <h3>Share and Help Others Stay Safe</h3>
+                  </div>
+                  <div className="col-xs-12">
+                    <div className="row">
+                      <div className="col-xs-4">
+                        <a id="fbbtn" href={this.social.fb} target="_blank"><button id="shareFacebook" type="button"><i className="fa fa-facebook"></i></button></a>
+                      </div>
+                      <div className="col-xs-4">
+                        <a href={this.social.twitter} target="_blank"><button id="shareTwitter" type="button"><i className="fa fa-twitter"></i></button></a>
+                      </div>
+                      <div className="col-xs-4">
+                        <a href={this.social.mail}><button id="shareEmail" type="button"><i className="fa fa-envelope"></i></button></a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className={rightClass} id="watchesAndWarnings">
+                <h3>Watches and Warnings</h3>
+                <div id="hoverZone">
+                <button id="allWarnings" type="button"><span>See All</span> <i className="fa fa-arrow-left"></i></button>
+                  <div className="rightzone"></div>
+                </div>
+                <button id="closeWW" type="button">
+                  <span>Close</span>
+                  <i className="fa fa-arrow-right"></i>
+                </button>
+                <div className="warninglist">
+                  <ul>
+                    {this.state.warnings.map((warning, i) => {
+                      return (
+                        <li className={warning.type.toLowerCase()} key={i}>
+                          <a href={this.state.settings.warningPage} target="_blank">
+                            <i className="fa fa-circle"></i>
+                            <span className="county">{warning.county}</span>
+                            <span className="warning">{warning.type}</span>
+                          </a>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="col-xl-3 hidden-xs hidden-sm hidden-md hidden-lg">
+          <div className="ad ad_zone">
+            <img src="http://ftpcontent.worldnow.com/kotv/test/wx/test_wxtakeover_ad.jpg" />
+          </div>
+        </div>
+        <div id="mobileAlerts" className="col-xs-12 hidden-sm hidden-md hidden-lg hidden-xl">
+          <h3>Alerts</h3>
+          <h4>Get The Latest Info For Your County</h4>
+          <div className="warninglist">
+            <ul>
+              {this.state.warnings.map((warning, i) => {
+                return (
+                  <li className={warning.type.toLowerCase()} key={i}>
+                    <a href={this.state.settings.warningPage} target="_blank">
+                      <i className="fa fa-circle"></i>
+                      <span className="county">{warning.county}</span>
+                      <span className="warning">{warning.type}</span>
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </div>
+        <div id="mobileRadar" className="col-xs-12 hidden-sm hidden-md hidden-lg hidden-xl">
+          <h3>Radars</h3>
+        </div>
+        <div id="mobileTabs" className="col-xs-12 hidden-sm hidden-md hidden-lg hidden-xl">
+          <ul>
+            <li><a href="#" onClick={(e) => { this.changeTabs(e, 'live'); }}>Live</a></li>
+            <li><a href="#" onClick={(e) => { this.changeTabs(e, 'alerts'); }}>Alerts</a></li>
+            <li><a href="#" onClick={(e) => { this.changeTabs(e, 'radars'); }}>Radars</a></li>
+          </ul>
+        </div>
       </div>
-		);
-	}
+    );
+  }
 }
 
-
-
-
-export default Header;
+export default WeatherTakeover;
